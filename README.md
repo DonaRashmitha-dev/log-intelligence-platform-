@@ -1,6 +1,6 @@
-# LOG.INTEL — Real-Time Log Intelligence Platform
+# LOG.INTEL â€” Real-Time Log Intelligence Platform
 
-> Ingest system logs → detect anomalies statistically → query everything in plain English via RAG-powered AI agent.
+> Ingest system logs â†’ detect anomalies statistically â†’ query everything in plain English via RAG-powered AI agent.
 
 ---
 
@@ -20,7 +20,7 @@ No cloud dependency. No managed services. Fully self-hosted.
 ### System Health Summary
 ![System Health](screenshots/dashboardhtml_2.png)
 
-### Error Query — Last 6 Hours
+### Error Query â€” Last 6 Hours
 ![Errors Last 6 Hours](screenshots/dashboardhtml_3.png)
 
 ---
@@ -29,20 +29,20 @@ No cloud dependency. No managed services. Fully self-hosted.
 
 ```
 Fault Injector (Flask)
-        │
-        ▼
-Ingestion Service (FastAPI) ──► PostgreSQL + pgvector
-        │                              │
-        ▼                              ▼
+        â”‚
+        â–¼
+Ingestion Service (FastAPI) â”€â”€â–º PostgreSQL + pgvector
+        â”‚                              â”‚
+        â–¼                              â–¼
 Embedding Worker              EWMA Anomaly Detector
-(nomic-embed-text)                     │
-                                       ▼
+(nomic-embed-text)                     â”‚
+                                       â–¼
                               Redis Alert Channel
-                                       │
-                                       ▼
+                                       â”‚
+                                       â–¼
                             Agent API (FastAPI + RAG)
-                                       │
-                                       ▼
+                                       â”‚
+                                       â–¼
                               Dashboard (Vanilla JS)
 ```
 
@@ -56,10 +56,10 @@ Embedding Worker              EWMA Anomaly Detector
 | Ingestion API | FastAPI + asyncpg |
 | Database | PostgreSQL 16 + pgvector extension |
 | Cache / Alerts | Redis 7 |
-| Embeddings | Ollama — nomic-embed-text |
+| Embeddings | Ollama â€” nomic-embed-text |
 | Anomaly Detection | EWMA (Exponentially Weighted Moving Average) |
-| AI Agent | Ollama — TinyLlama (local LLM) |
-| RAG Pipeline | Vector similarity search → LLM context injection |
+| AI Agent | Ollama â€” TinyLlama (local LLM) |
+| RAG Pipeline | Vector similarity search â†’ LLM context injection |
 | Dashboard | Vanilla JS, HTML, CSS |
 | Containers | Docker (Postgres + Redis) |
 
@@ -67,13 +67,13 @@ Embedding Worker              EWMA Anomaly Detector
 
 ## Key Features
 
-**Real-time ingestion** — fault simulator generates CPU/memory/crash logs every few seconds; ingestion service writes to Postgres with embeddings via pgvector.
+**Real-time ingestion** â€” fault simulator generates CPU/memory/crash logs every few seconds; ingestion service writes to Postgres with embeddings via pgvector.
 
-**EWMA anomaly detection** — statistical threshold model detects CPU spikes using exponentially weighted moving averages. Fires CRITICAL alerts to Redis when threshold breached. Adaptive — threshold adjusts to baseline over time.
+**EWMA anomaly detection** â€” statistical threshold model detects CPU spikes using exponentially weighted moving averages. Fires CRITICAL alerts to Redis when threshold breached. Adaptive â€” threshold adjusts to baseline over time.
 
-**RAG query pipeline** — natural language question → embed query → vector similarity search → top-k relevant logs injected as context → LLM generates specific answer with log IDs and timestamps.
+**RAG query pipeline** â€” natural language question â†’ embed query â†’ vector similarity search â†’ top-k relevant logs injected as context â†’ LLM generates specific answer with log IDs and timestamps.
 
-**Live dashboard** — real-time metrics (total logs, error rate, anomaly count, latest critical timestamp), filterable log stream (ALL/ERROR/WARN/INFO/DEBUG), AI query panel.
+**Live dashboard** â€” real-time metrics (total logs, error rate, anomaly count, latest critical timestamp), filterable log stream (ALL/ERROR/WARN/INFO/DEBUG), AI query panel.
 
 ---
 
@@ -84,7 +84,7 @@ Embedding Worker              EWMA Anomaly Detector
 | Total logs ingested | 2,735 |
 | Error rate | 75.4% |
 | EWMA anomalies detected | 431 |
-| Latest anomaly | CPU spike 87.6% (threshold 84.3%, σ=18.60) |
+| Latest anomaly | CPU spike 87.6% (threshold 84.3%, Ïƒ=18.60) |
 
 ---
 
@@ -99,7 +99,7 @@ Embedding Worker              EWMA Anomaly Detector
 
 ```bash
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/log-intelligence-platform.git
+git clone https://github.com/DonaRashmitha-dev/log-intelligence-platform.git
 cd log-intelligence-platform
 
 # 2. Pull Ollama models
@@ -120,20 +120,20 @@ pip install -r requirements.txt
 ### Manual Start (4 terminals)
 
 ```powershell
-# Terminal 1 — Ingestion
+# Terminal 1 â€” Ingestion
 $env:DATABASE_URL="postgresql://loguser:changeme_strong_password@localhost:5432/logdb"
 $env:REDIS_URL="redis://localhost:6379"
 cd services/ingestion
 uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
-# Terminal 2 — Agent
+# Terminal 2 â€” Agent
 cd services/agent
 uvicorn agent_api:app --host 0.0.0.0 --port 8002 --reload
 
-# Terminal 3 — Dashboard
+# Terminal 3 â€” Dashboard
 python -m http.server 8080
 
-# Terminal 4 — Fault Injector
+# Terminal 4 â€” Fault Injector
 cd services/fault_injector
 python app.py
 ```
@@ -146,15 +146,15 @@ Open http://localhost:8080/dashboard.html
 
 ```
 log-intelligence-platform/
-├── services/
-│   ├── ingestion/          # FastAPI log ingestion + embedding pipeline
-│   ├── agent/              # RAG agent API (vector search + LLM)
-│   ├── fault_injector/     # Synthetic fault log generator
-│   ├── embedding_worker/   # Async embedding processor
-│   └── ewma_detector/      # Statistical anomaly detection
-├── dashboard.html          # Live monitoring dashboard
-├── start.ps1               # One-command startup script
-└── docker-compose.yml      # Postgres + Redis containers
+â”œâ”€â”€ services/
+â”‚   â”œâ”€â”€ ingestion/          # FastAPI log ingestion + embedding pipeline
+â”‚   â”œâ”€â”€ agent/              # RAG agent API (vector search + LLM)
+â”‚   â”œâ”€â”€ fault_injector/     # Synthetic fault log generator
+â”‚   â”œâ”€â”€ embedding_worker/   # Async embedding processor
+â”‚   â””â”€â”€ ewma_detector/      # Statistical anomaly detection
+â”œâ”€â”€ dashboard.html          # Live monitoring dashboard
+â”œâ”€â”€ start.ps1               # One-command startup script
+â””â”€â”€ docker-compose.yml      # Postgres + Redis containers
 ```
 
 ---
@@ -169,4 +169,6 @@ Used as infrastructure: PostgreSQL, pgvector, Redis, Docker, Ollama (model servi
 
 ## Why This Project
 
-Most observability tools are black boxes. This project is an exercise in building the full stack — from raw log ingestion to vector search to LLM reasoning — with every layer visible and modifiable. The goal was to understand how production monitoring systems actually work, not just use them.
+Most observability tools are black boxes. This project is an exercise in building the full stack â€” from raw log ingestion to vector search to LLM reasoning â€” with every layer visible and modifiable. The goal was to understand how production monitoring systems actually work, not just use them.
+
+This project extends two systems I previously built — an adaptive real-time monitoring system and a fault injection platform. Log Intelligence is the third layer: the AI brain that makes sense of what those systems produce.
