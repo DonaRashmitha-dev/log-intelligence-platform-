@@ -1,0 +1,147 @@
+version: "3.9"
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: logdb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-logdb}
+      POSTGRES_USER: ${POSTGRES_USER:-loguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-loguser} -d ${POSTGRES_DB:-logdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: logredis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Ollama (local LLM) ─────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    # Remove the deploy block below if you have no GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: >
+      sh -c "
+        echo 'Pulling llama3.1:8b ...' &&
+        ollama pull llama3.1:8b &&
+        echo 'Pulling nomic-embed-text ...' &&
+        ollama pull nomic-embed-text &&
+        echo 'Models ready.'
+      "
+    restart: "no"
+
+  # ── Existing System 1: Fault Injection ─────────────────
+  # Uncomment once you add the system as a submodule
+  # fault-api:
+  #   build: ./systems/fault_injection
+  #   container_name: fault-api
+  #   ports:
+  #     - "5001:5000"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -sf http://localhost:5000/metrics || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ── Existing System 2: Adaptive Monitoring ─────────────
+  # Uncomment once you add the system as a submodule
+  # node-webhook:
+  #   build: ./systems/adaptive_monitoring/webhook_server
+  #   container_name: node-webhook
+  #   ports:
+  #     - "3001:3000"
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+  # ── New Services (uncomment as you build each one) ─────
+  # ingestion:
+  #   build: ./services/ingestion
+  #   container_name: ingestion
+  #   ports:
+  #     - "8001:8001"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   env_file: .env
+
+  # embedding-worker:
+  #   build: ./services/embedding_worker
+  #   container_name: embedding-worker
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     ollama:
+  #       condition: service_healthy
+  #   env_file: .env
+
+  # agent-api:
+  #   build: ./services/agent
+  #   container_name: agent-api
+  #   ports:
+  #     - "8002:8002"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     ollama:
+  #       condition: service_healthy
+  #   env_file: .env
+
+  # dashboard:
+  #   build: ./services/dashboard
+  #   container_name: dashboard
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - agent-api
+  #   env_file: .env
+
+volumes:
+  pgdata:
+  ollama_models:

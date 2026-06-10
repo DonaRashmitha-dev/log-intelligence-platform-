@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d1117;
+    --card:      #161b22;
+    --border:    #21262d;
+    --accent:    #58a6ff;
+    --accent-dim:#1f6feb33;
+    --text:      #c9d1d9;
+    --text-dim:  #6e7681;
+    --text-bright:#f0f6fc;
+    --err:       #f85149;
+    --warn:      #d29922;
+    --info:      #3fb950;
+    --err-bg:    #f8514915;
+    --warn-bg:   #d2992215;
+    --info-bg:   #3fb95015;
+    --radius:    4px;
+    --font:      'JetBrains Mono', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── LAYOUT ── */
+  .shell {
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    min-height: 100vh;
+  }
+
+  main {
+    padding: 20px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 20px; height: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+  .logo-icon span {
+    background: var(--accent);
+    border-radius: 1px;
+  }
+  .logo-icon span:nth-child(2) { background: var(--err); }
+  .logo-icon span:nth-child(3) { background: var(--warn); opacity: .7; }
+  .logo-icon span:nth-child(4) { background: var(--info); }
+
+  .logo-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: .04em;
+  }
+  .logo-text span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .status-group {
+    display: flex;
+    gap: 12px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: .03em;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background .3s;
+  }
+  .status-dot.ok   { background: var(--info); box-shadow: 0 0 6px var(--info); }
+  .status-dot.err  { background: var(--err);  box-shadow: 0 0 6px var(--err); }
+  .status-dot.ping { animation: ping .6s ease; }
+
+  @keyframes ping {
+    0%   { transform: scale(1); opacity: 1; }
+    50%  { transform: scale(1.6); opacity: .5; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .clock {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .05em;
+  }
+
+  /* ── CARDS / PANELS ── */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #0d1117aa;
+  }
+
+  .panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+  }
+
+  .panel-tag {
+    font-size: 10px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 2px 7px;
+    border-radius: 2px;
+    letter-spacing: .05em;
+  }
+
+  /* ── QUERY PANEL ── */
+  .query-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .query-form {
+    padding: 12px 14px;
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .query-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-bright);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .query-input:focus { border-color: var(--accent); }
+  .query-input::placeholder { color: var(--text-dim); }
+
+  .btn {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    cursor: pointer;
+    letter-spacing: .05em;
+    white-space: nowrap;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:active { opacity: .7; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-dim); }
+
+  /* ── ANSWER BOX ── */
+  .answer-wrap { padding: 14px; }
+
+  .answer-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    min-height: 80px;
+    font-size: 13px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    position: relative;
+  }
+
+  .answer-box.loading { color: var(--text-dim); }
+  .answer-placeholder { color: var(--text-dim); font-style: normal; }
+
+  .cursor {
+    display: inline-block;
+    width: 8px; height: 14px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── SOURCE CARDS ── */
+  .sources-wrap {
+    padding: 0 14px 14px;
+  }
+
+  .sources-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    margin-bottom: 8px;
+  }
+
+  .source-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .source-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    align-items: start;
+  }
+  .source-card.sev-error  { border-left-color: var(--err);  background: var(--err-bg); }
+  .source-card.sev-warn   { border-left-color: var(--warn); background: var(--warn-bg); }
+  .source-card.sev-info   { border-left-color: var(--info); background: var(--info-bg); }
+  .source-card.sev-debug  { border-left-color: var(--text-dim); }
+
+  .source-msg {
+    font-size: 12px;
+    color: var(--text);
+    grid-column: 1 / -1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .source-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    grid-column: 1;
+  }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 2px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .badge-error { background: var(--err-bg); color: var(--err); border: 1px solid var(--err)44; }
+  .badge-warn  { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn)44; }
+  .badge-info  { background: var(--info-bg); color: var(--info); border: 1px solid var(--info)44; }
+  .badge-debug { background: #21262d; color: var(--text-dim); border: 1px solid var(--border); }
+
+  .source-ts {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .score-wrap {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .score-bar-bg {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .score-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width .4s ease;
+  }
+  .score-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 34px;
+    text-align: right;
+  }
+
+  /* ── LOGS TABLE ── */
+  .logs-panel {
+    grid-column: 1;
+    grid-row: 2 / 4;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .filter-btn {
+    font-family: var(--font);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    transition: all .15s;
+  }
+  .filter-btn:hover { color: var(--text); border-color: var(--text-dim); }
+  .filter-btn.active-all   { background: var(--accent-dim); color: var(--accent); border-color: var(--accent)55; }
+  .filter-btn.active-error { background: var(--err-bg); color: var(--err); border-color: var(--err)44; }
+  .filter-btn.active-warn  { background: var(--warn-bg); color: var(--warn); border-color: var(--warn)44; }
+  .filter-btn.active-info  { background: var(--info-bg); color: var(--info); border-color: var(--info)44; }
+
+  .refresh-info {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    background: #0d1117ee;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border)88;
+    transition: background .1s;
+  }
+  tbody tr:hover { background: #ffffff05; }
+  tbody tr.row-error { border-left: 2px solid var(--err); }
+  tbody tr.row-warn  { border-left: 2px solid var(--warn); }
+  tbody tr.row-info  { border-left: 2px solid var(--info); }
+  tbody tr.row-debug { border-left: 2px solid var(--text-dim); }
+
+  td {
+    padding: 7px 12px;
+    color: var(--text);
+    vertical-align: top;
+  }
+
+  td.td-id      { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+  td.td-source  { color: var(--accent); white-space: nowrap; }
+  td.td-sev     { white-space: nowrap; }
+  td.td-msg     { max-width: 400px; word-break: break-word; }
+  td.td-ts      { color: var(--text-dim); white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  .empty-row td {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 32px;
+    font-size: 12px;
+  }
+
+  /* ── METRICS & RIGHT COL ── */
+  .right-col {
+    grid-column: 2;
+    grid-row: 1 / 4;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .metrics-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .metric-card {
+    background: var(--bg);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .metric-card:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+  .metric-card:last-child  { border-radius: 0 0 var(--radius) var(--radius); }
+
+  .metric-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+  }
+
+  .metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-bright);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-value.m-err  { color: var(--err); }
+  .metric-value.m-warn { color: var(--warn); }
+  .metric-value.m-mono { font-size: 13px; padding-top: 4px; }
+
+  .metric-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* ── SPINNER ── */
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ERROR BANNER ── */
+  .err-banner {
+    display: none;
+    background: var(--err-bg);
+    border: 1px solid var(--err)44;
+    border-left: 3px solid var(--err);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    color: var(--err);
+    font-size: 12px;
+    margin: 10px 14px 0;
+  }
+  .err-banner.show { display: block; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+    .right-col { grid-column: 1; grid-row: auto; flex-direction: row; flex-wrap: wrap; }
+    .right-col > .panel { flex: 1 1 260px; }
+    .logs-panel { grid-row: auto; }
+  }
+
+  /* ── MINI SCAN LINE (signature element) ── */
+  @keyframes scanline {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+  .scanline {
+    pointer-events: none;
+    position: fixed;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(to bottom, transparent, #58a6ff08, transparent);
+    animation: scanline 8s linear infinite;
+    z-index: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="scanline"></div>
+
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="logo-text">LOG<span>.</span>INTEL</div>
+    </div>
+    <div class="header-right">
+      <div class="status-group">
+        <div class="status-pill">
+          <div class="status-dot" id="dot-collector"></div>
+          <span>collector</span>
+        </div>
+        <div class="status-pill">
+          <div class="status-dot" id="dot-agent"></div>
+          <span>agent</span>
+        </div>
+      </div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- AI QUERY PANEL -->
+    <div class="panel query-panel">
+      <div class="panel-header">
+        <span class="panel-title">AI Query</span>
+        <span class="panel-tag">GPT-RAG</span>
+      </div>
+      <div id="query-err" class="err-banner"></div>
+      <div class="query-form">
+        <input id="query-input" class="query-input" type="text"
+          placeholder="Ask about your logs…" value="system health summary">
+        <button id="query-btn" class="btn">▶ RUN</button>
+      </div>
+      <div class="answer-wrap">
+        <div id="answer-box" class="answer-box">
+          <span class="answer-placeholder">Answer will appear here…</span>
+        </div>
+      </div>
+      <div id="sources-section" class="sources-wrap" style="display:none">
+        <div class="sources-label">Source logs</div>
+        <div class="source-cards" id="source-cards"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT COL -->
+    <div class="right-col">
+
+      <!-- METRICS -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Metrics</span>
+          <span id="metrics-spinner" class="spinner" style="display:none"></span>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Total Logs</div>
+            <div class="metric-value" id="m-total">—</div>
+            <div class="metric-sub" id="m-total-sub">loading…</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Error Count</div>
+            <div class="metric-value m-err" id="m-errors">—</div>
+            <div class="metric-sub" id="m-errors-sub"></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Latest Anomaly</div>
+            <div class="metric-value m-mono" id="m-anomaly">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- LOGS TABLE -->
+    <div class="panel logs-panel">
+      <div class="panel-header">
+        <span class="panel-title">Log Stream</span>
+        <span id="logs-spinner" class="spinner" style="display:none"></span>
+      </div>
+      <div id="logs-err" class="err-banner"></div>
+      <div class="filter-row">
+        <button class="filter-btn active-all" data-sev="all">All</button>
+        <button class="filter-btn" data-sev="error">Error</button>
+        <button class="filter-btn" data-sev="warn">Warn</button>
+        <button class="filter-btn" data-sev="info">Info</button>
+        <button class="filter-btn" data-sev="debug">Debug</button>
+        <span class="refresh-info" id="refresh-info">auto-refresh 30s</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Source</th>
+              <th>Severity</th>
+              <th>Message</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="logs-tbody">
+            <tr class="empty-row"><td colspan="5"><span class="spinner"></span> Loading logs…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────
+const COLLECTOR_HEALTH = 'http://localhost:8001/health';
+const AGENT_HEALTH     = 'http://localhost:8002/health';
+const QUERY_URL        = 'http://localhost:8002/query';
+// Logs can come from agent or direct — try agent query with wildcard first
+const LOGS_URL         = 'http://localhost:8002/query'; // fallback via wildcard query
+
+// ── STATE ───────────────────────────────────────────────────────────
+let allLogs   = [];
+let activeSev = 'all';
+let queryAbort = null;
+
+// ── CLOCK ───────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── STATUS DOTS ─────────────────────────────────────────────────────
+async function checkHealth(url, dotId) {
+  const dot = document.getElementById(dotId);
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    dot.className = 'status-dot ok ping';
+    setTimeout(() => dot.classList.remove('ping'), 700);
+  } catch {
+    dot.className = 'status-dot err';
+  }
+}
+
+function pollHealth() {
+  checkHealth(COLLECTOR_HEALTH, 'dot-collector');
+  checkHealth(AGENT_HEALTH,     'dot-agent');
+}
+pollHealth();
+setInterval(pollHealth, 10000);
+
+// ── HELPERS ─────────────────────────────────────────────────────────
+function sevClass(s = '') {
+  const v = s.toLowerCase();
+  if (v.includes('error') || v.includes('critical') || v.includes('fatal')) return 'error';
+  if (v.includes('warn'))  return 'warn';
+  if (v.includes('debug')) return 'debug';
+  return 'info';
+}
+
+function badgeHtml(sev) {
+  const c = sevClass(sev);
+  return `<span class="badge badge-${c}">${sev || 'info'}</span>`;
+}
+
+function fmtTs(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleString('en-US', { hour12: false }); }
+  catch { return ts; }
+}
+
+function corsMsg(err) {
+  if (err.message && (err.message.includes('fetch') || err.message.includes('Failed') || err.message.includes('CORS'))) {
+    return '⚠ Cannot reach service. CORS blocked or server offline. Check that the service is running and has CORS enabled for this origin.';
+  }
+  return '⚠ ' + (err.message || 'Unknown error');
+}
+
+// ── AI QUERY ────────────────────────────────────────────────────────
+const queryBtn   = document.getElementById('query-btn');
+const queryInput = document.getElementById('query-input');
+const answerBox  = document.getElementById('answer-box');
+const queryErr   = document.getElementById('query-err');
+const sourceSection = document.getElementById('sources-section');
+const sourceCards   = document.getElementById('source-cards');
+
+async function runQuery(question) {
+  if (queryAbort) queryAbort.abort();
+  queryAbort = new AbortController();
+
+  queryBtn.disabled = true;
+  queryBtn.textContent = '⏳';
+  answerBox.textContent = '';
+  answerBox.className = 'answer-box loading';
+  answerBox.innerHTML = '<span class="spinner"></span> Thinking…';
+  sourceSection.style.display = 'none';
+  sourceCards.innerHTML = '';
+  queryErr.className = 'err-banner';
+
+  try {
+    const res = await fetch(QUERY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+      signal: queryAbort.signal,
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const data = await res.json();
+
+    // Stream-type effect on answer text
+    answerBox.className = 'answer-box';
+    const text = data.answer || '(no answer returned)';
+    await typeAnswer(answerBox, text);
+
+    // Source cards
+    if (data.sources && data.sources.length) {
+      sourceSection.style.display = 'block';
+      sourceCards.innerHTML = '';
+      data.sources.forEach(src => {
+        const sc = sevClass(src.severity);
+        const score = typeof src.score === 'number' ? src.score : parseFloat(src.score) || 0;
+        const pct = Math.round(Math.min(1, score) * 100);
+        const card = document.createElement('div');
+        card.className = `source-card sev-${sc}`;
+        card.innerHTML = `
+          <div class="source-msg" title="${escHtml(src.message || '')}">${escHtml((src.message || '').substring(0, 120))}</div>
+          <div class="source-meta">
+            ${badgeHtml(src.severity)}
+            <span class="source-ts">${escHtml(src.source || '')} · ${fmtTs(src.source_ts)}</span>
+          </div>
+          <div class="score-wrap">
+            <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%"></div></div>
+            <span class="score-label">${pct}%</span>
+          </div>`;
+        sourceCards.appendChild(card);
+      });
+
+      // Feed source logs into table + metrics
+      ingestSourceLogs(data.sources);
+    }
+
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    answerBox.className = 'answer-box';
+    answerBox.textContent = '';
+    queryErr.textContent = corsMsg(err);
+    queryErr.className = 'err-banner show';
+  } finally {
+    queryBtn.disabled = false;
+    queryBtn.textContent = '▶ RUN';
+  }
+}
+
+async function typeAnswer(el, text) {
+  el.textContent = '';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  el.appendChild(cursor);
+
+  const chars = [...text];
+  const chunkSize = Math.max(1, Math.floor(chars.length / 60));
+  for (let i = 0; i < chars.length; i += chunkSize) {
+    el.insertBefore(
+      document.createTextNode(chars.slice(i, i + chunkSize).join('')),
+      cursor
+    );
+    await sleep(16);
+  }
+  cursor.remove();
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+queryBtn.addEventListener('click', () => {
+  const q = queryInput.value.trim();
+  if (q) runQuery(q);
+});
+queryInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const q = queryInput.value.trim(); if (q) runQuery(q); }
+});
+
+// ── LOGS TABLE ──────────────────────────────────────────────────────
+const logsTbody  = document.getElementById('logs-tbody');
+const logsSpinner = document.getElementById('logs-spinner');
+const logsErr    = document.getElementById('logs-err');
+const refreshInfo = document.getElementById('refresh-info');
+let logsTimer = null;
+let nextRefresh = 30;
+
+function ingestSourceLogs(sources) {
+  sources.forEach(s => {
+    if (!allLogs.find(l => l.id === s.id)) {
+      allLogs.unshift({
+        id:        s.id || crypto.randomUUID().substring(0,8),
+        source:    s.source || '—',
+        severity:  s.severity || 'info',
+        message:   s.message || '',
+        source_ts: s.source_ts || null,
+      });
+    }
+  });
+  renderLogs();
+  updateMetrics();
+}
+
+async function fetchLogs() {
+  logsSpinner.style.display = 'inline-block';
+  logsErr.className = 'err-banner';
+  try {
+    // Try fetching a broad log dump via the query endpoint
+    const res = await fetch(LOGS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'show all recent logs' }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.sources && data.sources.length) {
+      // Merge without duplicates
+      data.sources.forEach(s => {
+        if (!allLogs.find(l => l.id === s.id)) {
+          allLogs.push({
+            id:        s.id || crypto.randomUUID().substring(0,8),
+            source:    s.source || '—',
+            severity:  s.severity || 'info',
+            message:   s.message || '',
+            source_ts: s.source_ts || null,
+          });
+        }
+      });
+      // Sort newest first
+      allLogs.sort((a,b) => {
+        if (!a.source_ts) return 1;
+        if (!b.source_ts) return -1;
+        return new Date(b.source_ts) - new Date(a.source_ts);
+      });
+      renderLogs();
+      updateMetrics();
+    }
+  } catch (err) {
+    if (allLogs.length === 0) {
+      logsErr.textContent = corsMsg(err);
+      logsErr.className = 'err-banner show';
+      renderLogs(); // show empty state
+    }
+  } finally {
+    logsSpinner.style.display = 'none';
+  }
+}
+
+function renderLogs() {
+  const filtered = activeSev === 'all'
+    ? allLogs
+    : allLogs.filter(l => sevClass(l.severity) === activeSev);
+
+  if (filtered.length === 0) {
+    logsTbody.innerHTML = `<tr class="empty-row"><td colspan="5">No logs${activeSev !== 'all' ? ' matching filter' : ''}</td></tr>`;
+    return;
+  }
+
+  logsTbody.innerHTML = filtered.map(l => {
+    const sc = sevClass(l.severity);
+    return `<tr class="row-${sc}">
+      <td class="td-id">${escHtml(String(l.id).substring(0,12))}</td>
+      <td class="td-source">${escHtml(l.source)}</td>
+      <td class="td-sev">${badgeHtml(l.severity)}</td>
+      <td class="td-msg">${escHtml(l.message)}</td>
+      <td class="td-ts">${fmtTs(l.source_ts)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── METRICS ─────────────────────────────────────────────────────────
+function updateMetrics() {
+  const total  = allLogs.length;
+  const errors = allLogs.filter(l => sevClass(l.severity) === 'error').length;
+
+  // Latest anomaly = most recent error/warn
+  const anomalies = allLogs
+    .filter(l => ['error','warn'].includes(sevClass(l.severity)) && l.source_ts)
+    .sort((a,b) => new Date(b.source_ts) - new Date(a.source_ts));
+
+  document.getElementById('m-total').textContent  = total.toLocaleString();
+  document.getElementById('m-total-sub').textContent = `across ${new Set(allLogs.map(l=>l.source)).size} source(s)`;
+  document.getElementById('m-errors').textContent = errors.toLocaleString();
+  document.getElementById('m-errors-sub').textContent = total
+    ? `${((errors/total)*100).toFixed(1)}% error rate`
+    : '';
+  document.getElementById('m-anomaly').textContent = anomalies.length
+    ? fmtTs(anomalies[0].source_ts)
+    : 'none detected';
+}
+
+// ── FILTER BUTTONS ──────────────────────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      b.className = 'filter-btn';
+    });
+    const sev = btn.dataset.sev;
+    activeSev = sev;
+    btn.className = `filter-btn active-${sev}`;
+    renderLogs();
+  });
+});
+
+// ── AUTO REFRESH ────────────────────────────────────────────────────
+function startRefreshTimer() {
+  clearInterval(logsTimer);
+  nextRefresh = 30;
+  logsTimer = setInterval(() => {
+    nextRefresh--;
+    refreshInfo.textContent = `refresh in ${nextRefresh}s`;
+    if (nextRefresh <= 0) {
+      refreshInfo.textContent = 'auto-refresh 30s';
+      fetchLogs();
+      nextRefresh = 30;
+    }
+  }, 1000);
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────
+(async function init() {
+  // Fire both in parallel
+  await Promise.all([
+    fetchLogs(),
+    runQuery('system health summary'),
+  ]);
+  startRefreshTimer();
+})();
+</script>
+</body>
+</html>

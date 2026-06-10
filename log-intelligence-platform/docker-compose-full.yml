@@ -1,0 +1,161 @@
+version: "3.9"
+
+x-db-env: &db-env
+  DATABASE_URL: postgresql://loguser:changeme_strong_password@postgres:5432/logdb
+
+x-redis-env: &redis-env
+  REDIS_URL: redis://redis:6379
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: logdb
+    environment:
+      POSTGRES_USER: loguser
+      POSTGRES_PASSWORD: changeme_strong_password
+      POSTGRES_DB: logdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loguser -d logdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: logredis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Fault Injection ─────────────────────────────────────────────────
+  fault_injection:
+    build:
+      context: ./services/fault_injection
+      dockerfile: Dockerfile
+    container_name: fault_injection
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Monitoring ──────────────────────────────────────────────────────
+  monitoring:
+    build:
+      context: ./services/monitoring
+      dockerfile: Dockerfile
+    container_name: monitoring
+    environment:
+      <<: *redis-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Ingestion ───────────────────────────────────────────────────────
+  ingestion:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: ingestion
+    environment:
+      <<: [*db-env, *redis-env]
+      FAULT_API_URL: http://fault_injection:5000
+      NODE_WEBHOOK_URL: http://monitoring:3001
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fault_injection:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Embedding Worker ────────────────────────────────────────────────
+  embedding_worker:
+    build:
+      context: ./services/embedding_worker
+      dockerfile: Dockerfile
+    container_name: embedding_worker
+    environment:
+      <<: *db-env
+      OLLAMA_URL: http://host.docker.internal:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ── Anomaly Detector ────────────────────────────────────────────────
+  anomaly_detector:
+    build:
+      context: ./services
+      dockerfile: Dockerfile.anomaly
+    container_name: anomaly_detector
+    environment:
+      <<: *db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Agent API ───────────────────────────────────────────────────────
+  agent:
+    build:
+      context: ./services/agent
+      dockerfile: Dockerfile
+    container_name: agent
+    environment:
+      DATABASE_URL: postgresql://loguser:changeme_strong_password@postgres:5432/logdb
+      OLLAMA_URL: http://host.docker.internal:11434
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Dashboard ───────────────────────────────────────────────────────
+  dashboard:
+    image: nginx:alpine
+    container_name: dashboard
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - agent
+
+volumes:
+  pgdata:
