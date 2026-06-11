@@ -1,14 +1,14 @@
-# LOG.INTEL — Real-Time Log Intelligence Platform
+# LOG.INTEL Real Time Log Intelligence Platform
 
-> Ingest system logs → detect anomalies statistically → query everything in plain English via RAG-powered AI agent.
+> Ingest system logs → detect anomalies statistically → query everything in plain English via RAG powered AI agent.
 
 ---
 
 ## What This Is
 
-A production-grade observability platform built from scratch. It continuously ingests fault-injection logs, runs EWMA-based anomaly detection, embeds log data into a vector database, and exposes a natural language query interface powered by a local LLM with retrieval-augmented generation.
+A production grade observability platform built from scratch. It continuously ingests fault injection logs, runs EWMA based anomaly detection, embeds log data into a vector database, and exposes a natural language query interface powered by a local LLM with retrieval augmented generation.
 
-No cloud dependency. No managed services. Fully self-hosted.
+No cloud dependency. No managed services. Fully self hosted.
 
 ---
 
@@ -20,7 +20,7 @@ No cloud dependency. No managed services. Fully self-hosted.
 ### System Health Summary
 ![System Health](screenshots/dashboardhtml_2.png)
 
-### Error Query - Last 6 Hours
+### Error Query Last 6 Hours
 ![Errors Last 6 Hours](screenshots/dashboardhtml_3.png)
 
 ---
@@ -33,7 +33,7 @@ No cloud dependency. No managed services. Fully self-hosted.
 | Ingestion API | FastAPI + asyncpg |
 | Database | PostgreSQL 16 + pgvector |
 | Cache / Alerts | Redis 7 |
-| Embeddings | Ollama - nomic-embed-text |
+| Embeddings | Ollama - nomic embed text |
 | Anomaly Detection | EWMA (Exponentially Weighted Moving Average) |
 | AI Agent | Ollama - TinyLlama (local LLM) |
 | RAG Pipeline | Vector similarity search -> LLM context injection |
@@ -44,13 +44,13 @@ No cloud dependency. No managed services. Fully self-hosted.
 
 ## Key Features
 
-**Real-time ingestion** - fault simulator generates CPU/memory/crash logs every few seconds.
+**Real time ingestion** - fault simulator generates CPU/memory/crash logs every few seconds.
 
 **EWMA anomaly detection** - statistical threshold model detects CPU spikes. Fires CRITICAL alerts to Redis when threshold breached.
 
 **RAG query pipeline** - natural language question -> embed query -> vector similarity search -> top-k logs injected as context -> LLM generates answer with log IDs and timestamps.
 
-**Live dashboard** - real-time metrics, filterable log stream, AI query panel.
+**Live dashboard** - real time metrics, filterable log stream, AI query panel.
 
 ---
 
@@ -75,10 +75,10 @@ No cloud dependency. No managed services. Fully self-hosted.
 ### Setup
 
 ```bash
-git clone https://github.com/DonaRashmitha-dev/log-intelligence-platform-.git
-cd log-intelligence-platform
+git clone https://github.com/DonaRashmitha-dev/log-intelligence-platform.git
+cd log intelligence platform
 
-ollama pull nomic-embed-text
+ollama pull nomic embed text
 ollama pull tinyllama
 
 docker compose up -d
@@ -118,6 +118,6 @@ Used as infrastructure: PostgreSQL, pgvector, Redis, Docker, Ollama (model servi
 
 ## Why This Project
 
-Most observability tools are black boxes. This project is an exercise in building the full stack - from raw log ingestion to vector search to LLM reasoning - with every layer visible and modifiable.
+Most observability tools are black boxes. This project is an exercise in building the full stack from raw log ingestion to vector search to LLM reasoning with every layer visible and modifiable.
 
 This project extends two systems I previously built - an adaptive real-time monitoring system and a fault injection platform. Log Intelligence is the third layer: the AI brain that makes sense of what those systems produce.
