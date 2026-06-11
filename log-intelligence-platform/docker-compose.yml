@@ -1,17 +1,27 @@
-version: "3.9"
+﻿version: "3.9"
+
+x-db-env: &db-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-loguser}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-logdb}
+
+x-redis-env: &redis-env
+  REDIS_URL: redis://redis:6379
+
+x-ollama-env: &ollama-env
+  OLLAMA_URL: http://ollama:11434
+  OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+  OLLAMA_LLM_MODEL: ${OLLAMA_LLM_MODEL:-tinyllama}
 
 services:
 
-  # ── Infrastructure ──────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
     container_name: logdb
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-logdb}
-      POSTGRES_USER: ${POSTGRES_USER:-loguser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
+      POSTGRES_DB:       ${POSTGRES_DB:-logdb}
+      POSTGRES_USER:     ${POSTGRES_USER:-loguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -32,7 +42,6 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── Ollama (local LLM) ─────────────────────────────────
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -40,14 +49,6 @@ services:
       - "11434:11434"
     volumes:
       - ollama_models:/root/.ollama
-    # Remove the deploy block below if you have no GPU
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
       interval: 10s
@@ -64,83 +65,97 @@ services:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: >
       sh -c "
-        echo 'Pulling llama3.1:8b ...' &&
-        ollama pull llama3.1:8b &&
-        echo 'Pulling nomic-embed-text ...' &&
+        ollama pull tinyllama &&
         ollama pull nomic-embed-text &&
         echo 'Models ready.'
       "
     restart: "no"
 
-  # ── Existing System 1: Fault Injection ─────────────────
-  # Uncomment once you add the system as a submodule
-  # fault-api:
-  #   build: ./systems/fault_injection
-  #   container_name: fault-api
-  #   ports:
-  #     - "5001:5000"
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "curl -sf http://localhost:5000/metrics || exit 1"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  ingestion:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: ingestion
+    ports:
+      - "8001:8001"
+    environment:
+      <<: [*db-env, *redis-env]
+      FAULT_API_URL:    ${FAULT_API_URL:-http://localhost:5001}
+      NODE_WEBHOOK_URL: ${NODE_WEBHOOK_URL:-http://localhost:3001}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # ── Existing System 2: Adaptive Monitoring ─────────────
-  # Uncomment once you add the system as a submodule
-  # node-webhook:
-  #   build: ./systems/adaptive_monitoring/webhook_server
-  #   container_name: node-webhook
-  #   ports:
-  #     - "3001:3000"
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
+  embedding-worker:
+    build:
+      context: ./services/embedding_worker
+      dockerfile: Dockerfile
+    container_name: embedding_worker
+    environment:
+      <<: [*db-env, *ollama-env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
 
-  # ── New Services (uncomment as you build each one) ─────
-  # ingestion:
-  #   build: ./services/ingestion
-  #   container_name: ingestion
-  #   ports:
-  #     - "8001:8001"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   env_file: .env
+  anomaly-detector:
+    build:
+      context: ./services/anomaly_detector
+      dockerfile: Dockerfile
+    container_name: anomaly_detector
+    environment:
+      <<: [*db-env, *redis-env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
-  # embedding-worker:
-  #   build: ./services/embedding_worker
-  #   container_name: embedding-worker
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     ollama:
-  #       condition: service_healthy
-  #   env_file: .env
+  agent:
+    build:
+      context: ./services/agent
+      dockerfile: Dockerfile
+    container_name: agent
+    ports:
+      - "8002:8002"
+    environment:
+      <<: [*db-env, *redis-env, *ollama-env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ingestion:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # agent-api:
-  #   build: ./services/agent
-  #   container_name: agent-api
-  #   ports:
-  #     - "8002:8002"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     ollama:
-  #       condition: service_healthy
-  #   env_file: .env
-
-  # dashboard:
-  #   build: ./services/dashboard
-  #   container_name: dashboard
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - agent-api
-  #   env_file: .env
+  dashboard:
+    image: nginx:alpine
+    container_name: dashboard
+    ports:
+      - "8080:80"
+    volumes:
+      - ./services/dashboard/index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      agent:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:

@@ -1,4 +1,4 @@
-﻿import json, logging, asyncpg, httpx, re, anthropic
+﻿import json, logging, asyncpg, httpx, re, os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,10 +8,10 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-DB = "postgresql://loguser:changeme_strong_password@localhost:5432/logdb"
-OLLAMA = "http://localhost:11434"
-EMBED_MODEL = "nomic-embed-text"
-LLM_MODEL = "tinyllama"
+DB     = os.environ.get("DATABASE_URL", "postgresql://loguser:changeme@localhost:5432/logdb")
+OLLAMA = os.environ.get("OLLAMA_URL",   "http://localhost:11434")
+EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+LLM_MODEL   = os.environ.get("OLLAMA_LLM_MODEL",   "tinyllama")
 _pool = None
 
 async def get_pool():
@@ -49,18 +49,18 @@ async def search(q, k=8):
 async def get_stats(since):
     pool = await get_pool()
     rows = await pool.fetch(
-        "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity IN ('error','critical')) as errors, COUNT(*) FILTER (WHERE source = 'ewma_detector') as anomalies, MAX(ingested_at) FILTER (WHERE severity = 'critical') as last_critical FROM logs WHERE ingested_at >= $1",
+        "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity IN ('error','critical')) as errors, COUNT(*) FILTER (WHERE source = 'ewma_detector') as anomalies, COUNT(*) FILTER (WHERE event_type = 'fault_injected') as faults, MAX(ingested_at) FILTER (WHERE severity = 'critical') as last_critical FROM logs WHERE ingested_at >= $1",
         since
     )
     return dict(rows[0]) if rows else {}
 
 async def llm(system_prompt, user_prompt):
-    async with __import__("httpx").AsyncClient(timeout=180) as c:
-        r = await c.post("http://localhost:11434/api/chat", json={
-            "model": "tinyllama", "stream": False,
+    async with httpx.AsyncClient(timeout=180) as c:
+        r = await c.post(OLLAMA + "/api/chat", json={
+            "model": LLM_MODEL, "stream": False,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user",   "content": user_prompt}
             ]
         })
         return r.json()["message"]["content"]
@@ -72,7 +72,7 @@ class Q(BaseModel):
 async def query(req: Q):
     try:
         since = parse_time_filter(req.question)
-        hits = await search(req.question)
+        hits  = await search(req.question)
         stats = await get_stats(since)
         context = "\n".join(f"[id={r['id']} src={r['source']} sev={r['severity']}] {r['message']}" for r in hits)
         answer = await llm(
@@ -88,18 +88,17 @@ async def query(req: Q):
 @app.get("/stats")
 async def stats_endpoint():
     try:
-        pool = await get_pool()
+        pool  = await get_pool()
         since = datetime.now(timezone.utc) - timedelta(hours=24)
-        rows = await pool.fetch(
-            "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity IN ('error','critical')) as errors, COUNT(*) FILTER (WHERE source = 'ewma_detector') as anomalies, MAX(ingested_at) FILTER (WHERE severity = 'critical') as last_critical FROM logs WHERE ingested_at >= $1",
+        rows  = await pool.fetch(
+            "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity IN ('error','critical')) as errors, COUNT(*) FILTER (WHERE source = 'ewma_detector') as anomalies, COUNT(*) FILTER (WHERE event_type = 'fault_injected') as faults, MAX(ingested_at) FILTER (WHERE severity = 'critical') as last_critical FROM logs WHERE ingested_at >= $1",
             since
         )
         r = dict(rows[0]) if rows else {}
-        return {"total": int(r.get("total",0)), "errors": int(r.get("errors",0)), "anomalies": int(r.get("anomalies",0)), "last_critical": str(r.get("last_critical","")) if r.get("last_critical") else None}
+        return {"total": int(r.get("total",0)), "errors": int(r.get("errors",0)), "anomalies": int(r.get("anomalies",0)), "faults": int(r.get("faults",0)), "last_critical": str(r.get("last_critical","")) if r.get("last_critical") else None}
     except Exception as e:
-        return {"total": 0, "errors": 0, "anomalies": 0, "last_critical": None}
+        return {"total": 0, "errors": 0, "anomalies": 0, "faults": 0, "last_critical": None}
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-

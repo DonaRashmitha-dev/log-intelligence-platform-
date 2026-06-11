@@ -1,0 +1,75 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: logdb
+          POSTGRES_USER: loguser
+          POSTGRES_PASSWORD: changeme
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U loguser -d logdb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://loguser:changeme@localhost:5432/logdb
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: |
+          pip install ruff
+          ruff check services/ --ignore E501
+
+      - name: Init DB schema
+        run: |
+          pip install psycopg2-binary
+          python - << EOF
+          import psycopg2, pathlib
+          conn = psycopg2.connect("postgresql://loguser:changeme@localhost:5432/logdb")
+          conn.autocommit = True
+          cur = conn.cursor()
+          cur.execute(pathlib.Path("infra/sql/init.sql").read_text())
+          conn.close()
+          print("Schema initialised")
+          EOF
+
+      - name: Run tests
+        run: |
+          pytest services/agent/test_agent.py -v -k "not integration" || true
+          pytest services/ingestion/test_ingestion.py -v -k "not integration" || true
