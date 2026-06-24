@@ -96,7 +96,7 @@ Dashboard (Vanilla JS)
 
 ```bash
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/log-intelligence-platform.git
+git clone https://github.com/DonaRashmitha-dev/log-intelligence-platform.git
 cd log-intelligence-platform
 
 # 2. Pull Ollama models
