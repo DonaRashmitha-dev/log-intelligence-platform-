@@ -12,7 +12,6 @@ No cloud dependency. No managed services. Fully self-hosted.
 
 ---
 
-Part of a Three-Layer System
 LOG.INTEL is Layer 3 of a system built in stages.
 Layer 1 — adaptive_real_time_monitoring_system — a polyglot monitoring pipeline (C++, Python, Node.js, Redis, Docker) that uses EWMA to detect anomalies without fixed, manually-tuned thresholds.
 Layer 2 — Fault-injection-system — deliberately injects crashes, memory spikes, and delays into a running process, then tracks Mean Time To Recovery (MTTR) as it auto-restarts.
